@@ -1,0 +1,411 @@
+<?php
+// $Id: uc_modulbank.module,v 1.0 2014/05/02 10:33:10 modulbank.ru Exp $
+/**
+ *  настройки способа оплаты
+ */
+include_once __DIR__ . '/modulbanklib/ModulbankHelper.php';
+include_once __DIR__ . '/modulbanklib/ModulbankReceipt.php';
+
+function uc_payment_method_modulbank($op, &$order, $form = null, $form_state = null)
+{
+    $sno = array(
+        'osn'                => 'общая СН',
+        'usn_income'         => 'упрощенная СН (доходы)',
+        'usn_income_outcome' => 'упрощенная СН (доходы минус расходы)',
+        'envd'               => 'единый налог на вмененный доход',
+        'esn'                => 'единый сельскохозяйственный налог',
+        'patent'             => 'патентная',
+    );
+    $vat_items = array(
+        'none'   => 'без НДС',
+        'vat0'   => 'НДС по ставке 0%',
+        'vat10'  => 'НДС чека по ставке 10%',
+        'vat20'  => 'НДС чека по ставке 20%',
+        'vat110' => 'НДС чека по расчетной ставке 10/110',
+        'vat120' => 'НДС чека по расчетной ставке 20/120',
+    );
+    $payment_object = array(
+        'commodity'             => 'товар',
+        'excise'                => 'подакцизный товар',
+        'job'                   => 'работа',
+        'service'               => 'услуга',
+        'gambling_bet'          => 'ставка в азартной игре',
+        'gambling_prize'        => 'выигрыш в азартной игре',
+        'lottery'               => 'лотерейный билет',
+        'lottery_prize'         => 'выигрыш в лотерею',
+        'intellectual_activity' => 'результаты интеллектуальной деятельности',
+        'payment'               => 'платеж',
+        'agent_commission'      => 'агентское вознаграждение',
+        'composite'             => 'несколько вариантов',
+        'another'               => 'другое',
+    );
+
+    $payment_method = array(
+        'full_prepayment'    => 'полная предоплата',
+        'partial_prepayment' => 'частичная предоплата',
+        'advance'            => 'аванс',
+        'full_payment'       => 'полный расчет',
+        'partial_payment'    => 'частичный расчет и кредит',
+        'credit'             => 'кредит',
+        'credit_payment'     => 'выплата по кредиту',
+    );
+
+    $states = uc_order_state_list();
+    $state_list = array('-1' => 'Не делать возврат');
+    foreach($states as $state){
+        $state_list[$state['id']] = $state['title'];
+    }
+
+
+
+    switch ($op) {
+
+        case 'settings':
+            $form['uc_modulbank_name'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Название',
+                '#default_value' => variable_get('uc_modulbank_name', 'Оплата по карте'),
+                '#description'   => 'Отображаемое название способа оплаты в корзине',
+                '#required'      => true,
+            );
+
+            $form['uc_modulbank_merchant'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Мерчант',
+                '#default_value' => variable_get('uc_modulbank_merchant', ''),
+                '#description'   => '',
+            );
+
+            $form['uc_modulbank_secret_key'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Секретный ключ',
+                '#default_value' => variable_get('uc_modulbank_secret_key', ''),
+                '#description'   => '',
+            );
+
+            $form['uc_modulbank_test_secret_key'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Тестовый секретный ключ',
+                '#default_value' => variable_get('uc_modulbank_test_secret_key', ''),
+                '#description'   => '',
+            );
+
+            $form['uc_modulbank_mode'] = array(
+                '#type'          => 'select',
+                '#title'         => 'Режим',
+                '#options'       => array('prod' => 'Рабочий', 'test' => 'Тестовый'),
+                '#default_value' => variable_get('uc_modulbank_mode'),
+            );
+
+            $form['uc_modulbank_sno'] = array(
+                '#type'          => 'select',
+                '#title'         => "Система налогобложения",
+                '#options'       => $sno,
+                '#default_value' => variable_get('uc_modulbank_sno', 'usn'),
+            );
+
+            $form['uc_modulbank_product_vat'] = array(
+                '#type'          => 'select',
+                '#title'         => "НДС на товары",
+                '#options'       => $vat_items,
+                '#default_value' => variable_get('uc_modulbank_product_vat', 'none'),
+
+            );
+
+            $form['uc_modulbank_delivery_vat'] = array(
+                '#type'          => 'select',
+                '#title'         => "НДС на доставку",
+                '#options'       => $vat_items,
+                '#default_value' => variable_get('uc_modulbank_delivery_vat', 'none'),
+
+            );
+
+            $form['uc_modulbank_payment_object'] = array(
+                '#type'          => 'select',
+                '#title'         => "Признак предмета расчёта",
+                '#options'       => $payment_object,
+                '#default_value' => variable_get('uc_modulbank_payment_object', 'commodity'),
+            );
+
+            $form['uc_modulbank_payment_object_delivery'] = array(
+                '#type'          => 'select',
+                '#title'         => "Признак предмета расчёта на доставку",
+                '#options'       => $payment_object,
+                '#default_value' => variable_get('uc_modulbank_payment_object_delivery', 'service'),
+            );
+
+            $form['uc_modulbank_payment_method'] = array(
+                '#type'          => 'select',
+                '#title'         => "Признак способа расчёта",
+                '#options'       => $payment_method,
+                '#default_value' => variable_get('uc_modulbank_payment_method', 'full_prepayment'),
+            );
+
+            $form['uc_modulbank_status_return'] = array (
+                '#type' => 'select',
+                '#title' => 'Статус для возврата',
+                '#options' => $state_list,
+                '#default_value' => variable_get('uc_modulbank_status_return', 'canceled')
+            );
+
+            $form['uc_modulbank_success_link'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Адрес для перехода после успешной оплаты',
+                '#default_value' => variable_get('uc_modulbank_success_link', 'uc_modulbank/success'),
+                '#description'   => '',
+            );
+
+            $form['uc_modulbank_fail_link'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Адрес для перехода после ошибки при оплате',
+                '#default_value' => variable_get('uc_modulbank_fail_link', 'uc_modulbank/fail'),
+                '#description'   => '',
+            );
+
+            $form['uc_modulbank_cancel_link'] = array(
+                '#type'          => 'textfield',
+                '#title'         => 'Адрес для перехода в случае нажатия кнопки «Вернуться в магазин»',
+                '#default_value' => variable_get('uc_modulbank_cancel_link', 'cart'),
+                '#description'   => '',
+            );
+
+            $form['uc_modulbank_logging'] = array(
+                '#type'          => 'select',
+                '#title'         => 'Логгирование',
+                '#options'       => array('0' => t('No'), '1' => t('Yes')),
+                '#default_value' => variable_get('uc_modulbank_logging'),
+            );
+
+            return $form;
+        case 'cart-process':
+            return true;
+    }
+}
+
+/**
+ * обновление статуса заказа
+ */
+
+function uc_modulbank_uc_order($op, $order, $arg2){
+    if(
+        $op == 'update'
+        && $order->payment_method === 'uc_modulbank'
+        && $arg2 == variable_get('uc_modulbank_status_return')
+    ) {
+        $payment = uc_payment_load_payments($order->order_id);
+        if (isset($payment[0]->data)) {
+            $transaction = $payment[0]->data;
+            $key = uc_modulbank_get_key();
+            $merchant = variable_get('uc_modulbank_merchant');
+            $amount = number_format($order->order_total, 2, '.', '');
+            uc_modulbank_logging(['merchant' => $merchant, 'amount' => $amount, 'transaction' => $transaction], 'refund');
+            $response = ModulbankHelper::refund($merchant, $amount, $transaction, $key);
+            $response = json_decode($response);
+            if ($response->status === 'error') {
+                drupal_set_message("Возврат: " . $response->message, 'error');
+            }
+            uc_modulbank_logging($response, 'refundResponse');
+        }
+
+  }
+}
+
+/**
+ *  список страниц
+ */
+function uc_modulbank_menu()
+{
+    $items['uc_modulbank/done'] = array('title' => 'Internal Data', 'page callback' =>
+        'uc_modulbank_done_payment', 'access arguments' => array('access content'), 'type' =>
+        MENU_CALLBACK);
+    $items['uc_modulbank/success'] = array('title' => 'Internal Data', 'page callback' =>
+        'uc_modulbank_payment_success', 'page arguments' => array(), 'access arguments' => array
+        ('access content'), 'type' => MENU_CALLBACK);
+    $items['uc_modulbank/fail'] = array('title' => 'Internal Data', 'page callback' =>
+        'uc_modulbank_payment_fail', 'page arguments' => array(), 'access arguments' => array('access content'),
+        'type'                                      => MENU_CALLBACK);
+    return $items;
+}
+/**
+ *  способ оплаты в списке выбора
+ */
+function uc_modulbank_uc_payment_method()
+{
+    $title      = variable_get('uc_modulbank_name');
+    $methods['uc_modulbank'] = array(
+        'id'         => 'uc_modulbank',
+        'name'       => 'Модульбанк: Приём платежей',
+        'review'     => $title,
+        'title'      => $title,
+        'desc'       => '',
+        'callback'   => 'uc_payment_method_modulbank',
+        'weight'     => 3,
+        'checkout'   => true,
+        'no_gateway' => true,
+        'redirect'   => 'uc_modulbank_form',
+    );
+    return $methods;
+}
+
+/**
+ *  создание кнопки отправки заказа
+ */
+function uc_modulbank_form($form, &$form_state, $order)
+{
+    $module_info = system_get_info('module', 'uc_modulbank');
+    $sysinfo     = [
+        'language' => 'PHP ' . phpversion(),
+        'plugin'   => $module_info['version'],
+        'cms'      => 'Drupal ' . VERSION,
+    ];
+    $amount = number_format($order->order_total, 2, '.', '');
+
+
+    uc_modulbank_logging($order->line_items, 'lines');
+
+    $receipt = new ModulbankReceipt(variable_get('uc_modulbank_sno'), variable_get('uc_modulbank_payment_method'), $amount);
+    foreach ($order->products as $item) {
+        $receipt->addItem(htmlspecialchars_decode($item->title), $item->price, variable_get('uc_modulbank_product_vat'), variable_get('uc_modulbank_payment_object'), $item->qty);
+    }
+    foreach ($order->line_items as $item) {
+        if ($item['type'] == 'shipping') {
+            $receipt->addItem("Доставка", $item['amount'], variable_get('uc_modulbank_delivery_vat'), variable_get('uc_modulbank_payment_object_delivery'));
+        }
+    }
+
+    $data = [
+        'merchant'        => variable_get('uc_modulbank_merchant', ''),
+        'amount'          => $amount,
+        'order_id'        => $order->order_id,
+        'testing'         => variable_get('uc_modulbank_mode', '') == 'test' ? 1 : 0,
+        'description'     => 'Оплата заказа №' . $order->order_id,
+        'success_url'     => url(variable_get('uc_modulbank_success_link'), array('query' => array('order' => $order->order_id), 'absolute' => true)),
+        'fail_url'        => url(variable_get('uc_modulbank_fail_link'), array('query' => array('order' => $order->order_id), 'absolute' => true)),
+        'cancel_url'      => url(variable_get('uc_modulbank_cancel_link'), array('absolute' => true)),
+        'callback_url'    => url('uc_modulbank/done', array('absolute' => true)),
+        'client_name'     => $order->billing_first_name . ' ' . $order->billing_last_name,
+        'client_email'    => $order->mail,
+        'receipt_contact' => $order->mail,
+        'receipt_items'   => $receipt->getJson(),
+        'unix_timestamp'  => time(),
+        'sysinfo'         => json_encode($sysinfo),
+        'salt'            => ModulbankHelper::getSalt(),
+    ];
+    $key               = uc_modulbank_get_key();
+    $data['signature'] = ModulbankHelper::calcSignature($key, $data);
+    uc_modulbank_logging($data, 'paymentForm');
+    $form['#action'] = 'https://pay.modulbank.ru/pay';
+    foreach ($data as $name => $value) {
+        $form[$name] = array('#type' => 'hidden', '#value' => $value);
+    }
+    $form['submit'] = array(
+        '#type'  => 'submit',
+        '#value' => 'Оплатить');
+    $form['form_build_id']['#access'] = false;
+    $form['form_token']['#access']    = false;
+    $form['form_id']['#access']       = false;
+    $form['#token']                   = false;
+    $form['#build_id']                = false;
+    return $form;
+}
+
+function uc_modulbank_get_key()
+{
+    $key = variable_get('uc_modulbank_mode') === 'test' ? variable_get('uc_modulbank_test_secret_key') : variable_get('uc_modulbank_secret_key');
+    return $key;
+}
+
+/**
+ *  modulbank done
+ */
+function uc_modulbank_done_payment()
+{
+    uc_modulbank_logging($_REQUEST, 'callback');
+    $key       = uc_modulbank_get_key();
+    $signature = ModulbankHelper::calcSignature($key, $_REQUEST);
+
+    if (strcasecmp($signature, $_REQUEST['signature']) === 0) {
+        $result_code = 0;
+        $order_id    = $_REQUEST['order_id'];
+        $order       = uc_order_load($order_id);
+        $amount      = $_REQUEST['amount'];
+        $status      = $_REQUEST['state'];
+        if ($status === 'COMPLETE') {
+            $description = 'Оплата получена ' . $_REQUEST['pan_mask'];
+            uc_payment_enter($order_id, 'uc_modulbank', $amount, $order->uid ? $order->uid : 0, $_REQUEST['transaction_id'], $description);
+            uc_order_comment_save($order_id, 0, $description, 'order', 'payment_received', true);
+            uc_cart_complete_sale($order);
+        } elseif ($status === 'FAILED') {
+            uc_order_comment_save($order_id, 0, 'fail payment', 'admin');
+            uc_order_update_status($order_id, 'canceled');
+        }
+    }
+}
+/**
+ *  завершение оплаты
+ */
+function uc_modulbank_payment_success()
+{
+
+    if ($_REQUEST['order']) {
+        $_SESSION['cart_order'] = $_REQUEST['order'];
+        $order_id               = $_SESSION['cart_order'];
+
+        $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = true;
+        uc_cart_empty();
+        if ($_REQUEST['transaction_id']) {
+            $transaction = $_REQUEST['transaction_id'];
+            $merchant    = variable_get('uc_modulbank_merchant');
+            $key         = uc_modulbank_get_key();
+            $result      = ModulbankHelper::getTransactionStatus(
+                $merchant,
+                $transaction,
+                $key
+            );
+            $result            = json_decode($result);
+            $paymentStatusText = "Ожидаем поступления средств";
+            if (isset($result->status) && $result->status === "ok") {
+
+                switch ($result->transaction->state) {
+                    case 'PROCESSING':$paymentStatusText = "В процессе";
+                        break;
+                    case 'WAITING_FOR_3DS':$paymentStatusText = "Ожидает 3DS";
+                        break;
+                    case 'FAILED':$paymentStatusText = "При оплате возникла ошибка";
+                        break;
+                    case 'COMPLETE':$paymentStatusText = "Оплата прошла успешно";
+                        break;
+                    default:$paymentStatusText = "Ожидаем поступления средств";
+                }
+            }
+        }
+        drupal_set_message("Статус оплаты: " . $paymentStatusText);
+        drupal_goto('cart/checkout/complete');
+    }
+    return $output;
+}
+
+function uc_modulbank_payment_fail()
+{
+    unset($_SESSION['cart_order']);
+    drupal_set_message(t("Your payment has been declined."), 'error');
+    drupal_goto('cart');
+    return $output;
+}
+
+function uc_modulbank_logging($data, $category)
+{
+
+    if (variable_get('uc_modulbank_logging')) {
+
+        if (is_object($data)){
+            $data = (array)$data;
+        }
+        watchdog(
+            'uc_modulbank',
+            $category . '=' . var_export($data, true),
+            null,
+            WATCHDOG_INFO
+        );
+    }
+}

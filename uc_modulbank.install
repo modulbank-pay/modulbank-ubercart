@@ -1,0 +1,22 @@
+<?php
+// $Id: uc_modulbank.install,v 1.0 2014/05/02 10:33:10 modulbank.ru Exp $
+
+/**
+ * @file
+ * Comepay payment gateway install file.
+ *
+ * This module installs a uc_modulbank module
+ */
+
+
+function uc_modulbank_install() {
+  // Create tables.
+  //drupal_install_schema('uc_modulbank');
+  drupal_set_message(t('Ubercart: Modulbank tables have been created.'));
+}
+
+function uc_compay_uninstall() {
+  // Remove tables.
+  //drupal_uninstall_schema('uc_modulbank');
+}
+
