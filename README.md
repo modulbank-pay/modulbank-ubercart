@@ -2,7 +2,7 @@
 
 Модуль позволяет принимать платежи банковской картой через Модульбанк.
 
-Модуль для установки через UI. [Скачать модуль](https://github.com/modulbank-pay/modulbank-ubercart/releases/download/1.0.0/modulbank_drupal-1.0.0.zip)
+Модуль для установки через UI. [Скачать модуль](https://github.com/modulbank-pay/modulbank-ubercart/releases/latest/download/modulbank_ubercart.zip)
 
 ### Установка
 
