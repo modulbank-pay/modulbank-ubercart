@@ -176,6 +176,34 @@ function uc_payment_method_modulbank($op, &$order, $form = null, $form_state = n
                 '#default_value' => variable_get('uc_modulbank_logging'),
             );
 
+            $form['uc_modulbank_show_custom_pm'] = array(
+                '#type'          => 'checkbox',
+                '#title'         => "Отображаемые варианты оплаты",
+                '#description'   => "Для отображения отдельных методов оплаты установите галочку и выберите интересующие из списка",
+                '#default_value' => variable_get('uc_modulbank_show_custom_pm', '0'),
+            );
+
+            $form['uc_modulbank_card'] = array(
+                '#type'          => 'checkbox',
+                '#title'         => "По карте",
+                '#default_value' => variable_get('uc_modulbank_card', '1'),
+            );
+            $form['uc_modulbank_sbp'] = array(
+                '#type'          => 'checkbox',
+                '#title'         => "Система быстрых платежей",
+                '#default_value' => variable_get('uc_modulbank_sbp', '1'),
+            );
+            $form['uc_modulbank_googlepay'] = array(
+                '#type'          => 'checkbox',
+                '#title'         => "GooglePay",
+                '#default_value' => variable_get('uc_modulbank_googlepay', '1'),
+            );
+            $form['uc_modulbank_applepay'] = array(
+                '#type'          => 'checkbox',
+                '#title'         => "Applepay",
+                '#default_value' => variable_get('uc_modulbank_applepay', '1'),
+            );
+
             return $form;
         case 'cart-process':
             return true;
@@ -291,6 +319,15 @@ function uc_modulbank_form($form, &$form_state, $order)
         'sysinfo'         => json_encode($sysinfo),
         'salt'            => ModulbankHelper::getSalt(),
     ];
+
+    if (variable_get('uc_modulbank_show_custom_pm')) {
+        $methods = ['card', 'sbp', 'applepay', 'googlepay'];
+        $methods = array_filter($methods, function ($method) {
+            return variable_get('uc_modulbank_'.$method);
+        });
+        $data['show_payment_methods'] = json_encode(array_values($methods));
+    }
+
     $key               = uc_modulbank_get_key();
     $data['signature'] = ModulbankHelper::calcSignature($key, $data);
     uc_modulbank_logging($data, 'paymentForm');
